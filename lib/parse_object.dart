@@ -27,12 +27,18 @@ class ParseObject{
      updatedAt=map[KEY_UPDATED_AT];
    }
 
+
+
     String className;
     String objectId;
     num createdAt;
     num updatedAt;
+    ///从服务器拿到的数据或将会保存或更新到服务器的数据
     HashMap<String, Object> serverData;
-    Set<String> availableKeys;
+    ///服务器数据的副本，可以随便更改值，新的值不会更新到服务器
+    HashMap<String, Object> cacheServerData;
+
+   Set<String> availableKeys;
     bool isComplete;
 
     var url="";

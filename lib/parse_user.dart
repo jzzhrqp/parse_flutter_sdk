@@ -20,14 +20,18 @@ class ParseUser extends ParseObject{
     this.url=Parse.it().serverUrl+"/users";
   }
 
-  /// 使用邮箱注册，不设置其它用户参数
+  /// 邮箱注册
   Future<Map> signUpByMail(String email,String password)async{
    var data={"email":email,"password":password};
    putAll(data);
-   return _signUp(serverData);
+   return signUp().then((map){
+     print("邮箱注册返回：${map.toString()}");
+   });
  }
 
  /// 注册
+ ///
+ /// 填写了email的，如果后端配置了要求验证邮件地址的，在注册成功后需要在电子邮箱进行邮件确认
  Future<Map> signUp() async {
     return _signUp(serverData);
  }
@@ -37,20 +41,19 @@ class ParseUser extends ParseObject{
     if(!validityResult["bool"]) {    //数据验证没有通过，不进行注册
         throw new Exception(validityResult["msg"]);
     }
+
     var url=Parse.it().serverUrl+"/users";
     var header=Parse.it().publicHeader();
     header["X-Parse-Revocable-Session"]="1";
     return http.post(url,body: json.encode(data),headers: header).then((response){
-      var data=json.decode(response.body);
       print("注册返回："+response.body);
-      var session=data[KEY_SESSION_TOKEN];
-      if(session==null){
+      var data=json.decode(response.body);
+      var objectId=data["objectId"];
+      if(objectId==null){
         print("注册失败");
         throw new Exception(data["error"]);
       }else{
-        print("注册成功");
-        _saveCurrentUser(data);
-        _saveCurrentUserSessionToken(session);
+        print("注册成功,请在您的电子邮箱进行确认");
         return data;
       }
     });
@@ -80,14 +83,34 @@ class ParseUser extends ParseObject{
 
   }
 
-  /// 登出，返回操作成功或失败
-  Future<bool> logout(String sessionToken) async {
+  ///请求重置密码
+ ///
+ /// 请求成功后，后台会发送一封电子邮件到用户账号的电子邮箱，点击邮件中的连接为账号设置新的密码
+  static Future<Map> requestPasswordReset(String email) async{
+    var url=Parse.it().serverUrl+"/requestPasswordReset";
+    var data={"email":""+email};
+    var header=Parse.it().publicHeader();
+    return http.post(url,body: json.encode(data),headers: header).then((response){
+      print("请求重置密码,body"+response.body+",statusCode:${response.statusCode}");
+      var map=json.decode(response.body);
+      if("{}"!=response.body){
+        throw new Exception(map["error"]);
+      }
+      return map;
+    });
+  }
+
+  /// 登出
+  Future<String> logout(String sessionToken) async {
     currentUserHeader=null;
     var header=Parse.it().publicHeader();
     header["X-Parse-Session-Token"]=sessionToken;
     var url=Parse.it().serverUrl+"/logout";
     return http.post(url,headers: header).then((response){
-      return response.statusCode==200;
+      if (response.statusCode!=200){
+        throw new Exception(response.body);
+      };
+      return response.body;
     });
   }
 
@@ -121,8 +144,8 @@ class ParseUser extends ParseObject{
     var oldSession=prefs.getString(KEY_SESSION_TOKEN);
     print("oldSession:$oldSession");
     if(oldSession!=null){
-      logout(oldSession).then((bool){
-        print("登出旧session操作成功：$bool");
+      logout(oldSession).then((d){
+        print("登出旧session操作成功");
       });
     }
     await prefs.setString(KEY_SESSION_TOKEN, session);
